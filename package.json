@@ -23,13 +23,13 @@
   "homepage": "https://github.com/lena-lis/algorithms-project-68#readme",
   "dependencies": {
     "@eslint/js": "^9.38.0",
+    "@eslint/eslintrc": "^3.3.1",
+    "eslint-plugin-import": "^2.32.0",
     "globals": "^16.4.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.1",
     "@jest/globals": "^30.2.0",
     "eslint": "^9.38.0",
-    "eslint-plugin-import": "^2.32.0",
     "jest": "^30.2.0",
     "lint-staged": "^16.2.6"
   }
