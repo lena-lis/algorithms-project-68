@@ -1,9 +1,28 @@
 export default (routes) => ({
   serve(path) {
-    const route = routes.find(r => r.path === path);
-    if (!route) {
-      throw new Error(`Route not found: ${path}`);
+    for (const route of routes) {
+      const paramNames = [];
+      const regexStr = route.path.replace(/:([\w]+)/g, (_, name) => {
+        paramNames.push(name);
+        return '(\\w+)';
+      });
+      const regex = new RegExp(`^${regexStr}$`);
+
+      const match = path.match(regex);
+      if (match) {
+        const params = {};
+        paramNames.forEach((name, i) => {
+          params[name] = match[i + 1];
+        });
+
+        return {
+          path,
+          handler: route.handler,
+          params
+        };
+      }
     }
-    return route.handler;
+
+    throw new Error(`Route not found: ${path}`);
   }
 });
