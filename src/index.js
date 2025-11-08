@@ -1,7 +1,7 @@
 const buildTrie = (routes) => {
   const root = {};
 
-  for (const { path, handler } of routes) {
+  for (const { path, handler, method = 'GET' } of routes) {
     const segments = path.split('/').filter(Boolean);
     let node = root;
 
@@ -9,12 +9,14 @@ const buildTrie = (routes) => {
       const key = segment.startsWith(':') ? '__param__' : segment;
       node[key] = node[key] || {};
       node = node[key];
+
       if (segment.startsWith(':')) {
         node.__paramName__ = segment.slice(1);
       }
     }
 
-    node.handler = handler;
+    node.handlers = node.handlers || {};
+    node.handlers[method.toUpperCase()] = handler;
   }
 
   return root;
@@ -23,7 +25,7 @@ const buildTrie = (routes) => {
 export default (routes) => {
   const trie = buildTrie(routes);
 
-  const serve = (path) => {
+  const serve = ({ path, method = 'GET' }) => {
     const segments = path.split('/').filter(Boolean);
     let node = trie;
     const params = {};
@@ -39,13 +41,14 @@ export default (routes) => {
       }
     }
 
-    if (!node.handler) {
-      throw new Error(`Route not found: ${path}`);
+    const handler = node.handlers?.[method.toUpperCase()];
+
+    if (!handler) {
+      throw new Error(`Route not found for ${method} ${path}`);
     }
 
-    return { path, handler: node.handler, params };
+    return { path, method: method.toUpperCase(), handler, params };
   };
 
   return { serve };
 };
-
