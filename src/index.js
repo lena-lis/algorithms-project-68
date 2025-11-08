@@ -1,66 +1,94 @@
-const buildTrie = (routes) => {
-  const root = {};
+export default function router(routes, request) {
+  if (!Array.isArray(routes)) return null;
 
-  for (const { path, handler, method = 'GET', constraints = {} } of routes) {
-    const segments = path.split('/').filter(Boolean);
+  const root = Object.create(null);
+
+  const addRoute = (route) => {
+    const {
+      path,
+      handler,
+      method = 'GET',
+      constraints = {},
+    } = route;
+    const segments = path.replace(/^\/+/g, '').split('/').filter(Boolean);
     let node = root;
 
-    for (const segment of segments) {
-      const isParam = segment.startsWith(':');
-      const key = isParam ? '__param__' : segment;
-
-      node[key] = node[key] || {};
-      node = node[key];
-
-      if (isParam) {
+    segments.forEach((segment) => {
+      if (segment.startsWith(':')) {
         const paramName = segment.slice(1);
-        node.__paramName__ = paramName;
-
-        if (constraints[paramName]) {
-          node.__constraint__ = new RegExp(`^${constraints[paramName]}$`);
+        if (!node.paramChild) {
+          node.paramChild = Object.create(null);
         }
-      }
-    }
-
-    node.handlers = node.handlers || {};
-    node.handlers[method.toUpperCase()] = handler;
-  }
-
-  return root;
-};
-
-export default (routes) => {
-  const trie = buildTrie(routes);
-
-  const serve = ({ path, method = 'GET' }) => {
-    const segments = path.split('/').filter(Boolean);
-    let node = trie;
-    const params = {};
-
-    for (const segment of segments) {
-      if (node[segment]) {
-        node = node[segment];
-      } else if (node.__param__) {
-        node = node.__param__;
-        const paramName = node.__paramName__;
-
-        if (node.__constraint__ && !node.__constraint__.test(segment)) {
-          throw new Error(`Constraint failed for param ${paramName}: "${segment}"`);
+        if (!node.paramChild[paramName]) {
+          node.paramChild[paramName] = {
+            paramName,
+            constraint: constraints[paramName],
+          };
         }
-
-        params[paramName] = segment;
+        node = node.paramChild[paramName];
       } else {
-        throw new Error(`Route not found: ${path}`);
+        if (!node.children) {
+          node.children = Object.create(null);
+        }
+        if (!node.children[segment]) {
+          node.children[segment] = Object.create(null);
+        }
+        node = node.children[segment];
       }
-    }
+    });
 
-    const handler = node.handlers?.[method.toUpperCase()];
-    if (!handler) {
-      throw new Error(`Route not found for ${method} ${path}`);
+    if (!node.handlers) {
+      node.handlers = Object.create(null);
     }
-
-    return { path, method: method.toUpperCase(), handler, params };
+    node.handlers[method] = handler;
   };
 
-  return { serve };
-};
+  routes.forEach(addRoute);
+
+  const serve = ({ path, method = 'GET' }) => {
+    const segments = path.replace(/^\/+/g, '').split('/').filter(Boolean);
+    const node = root;
+    const params = Object.create(null);
+
+    const findRoute = (currentNode, remainingSegments) => {
+      if (remainingSegments.length === 0) {
+        if (currentNode.handlers && currentNode.handlers[method]) {
+          return { handler: currentNode.handlers[method], params };
+        }
+        return null;
+      }
+
+      const [currentSegment, ...restSegments] = remainingSegments;
+
+      if (currentNode.children && currentNode.children[currentSegment]) {
+        return findRoute(currentNode.children[currentSegment], restSegments);
+      }
+
+      if (currentNode.paramChild) {
+        const paramNames = Object.keys(currentNode.paramChild);
+        for (let i = 0; i < paramNames.length; i += 1) {
+          const paramName = paramNames[i];
+          const paramNode = currentNode.paramChild[paramName];
+          const { constraint } = paramNode;
+
+          if (!constraint || new RegExp(constraint).test(currentSegment)) {
+            params[paramName] = currentSegment;
+            const result = findRoute(paramNode, restSegments);
+            if (result) return result;
+            delete params[paramName];
+          }
+        }
+      }
+      return null;
+    };
+
+    const result = findRoute(node, segments);
+    if (!result) {
+      return { error: `Route not found: ${path} [${method}]` };
+    }
+
+    return result;
+  };
+
+  return serve(request);
+}
